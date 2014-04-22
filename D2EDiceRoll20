@@ -1,0 +1,465 @@
+//Descent Second Edition Dice Mechanics
+//
+// copyright pug games 2014
+// please feel free to use this script, change it, add to it in any way you feel
+// Script created by Roll20 user Konrad J.
+//
+// !d2e log on|multi|single|off  // default:on and multi
+								// outputs dice rolled to the chat window if "on", only the result if "off"
+								// dice rolled will be on single line if "single" and on multiple lines if "multi"
+// !d2e graphics on|off|s|m|l  //default:on and m
+								// shows dice rolled as graphic, small, medium, or large if "on" or as text if "off"
+// !d2e a # # #					// a=attack dice, then list the number of blue, red, and yellow dice to roll, in that order.  If one colour isn't included then type a zero
+// !d2e d # # #					// d=defence dice, then list the number of black, brown, and grey dice to roll, in that order.  If one colour isn't included then type a zero
+//
+// !d2e w a|d # # #					  	// whisper not really working very well right now, please ignore this option for now
+									// will roll the dice and whisper them only to the GM, gm can't whisper dice rolls to other players
+									// due to the way the API currently works we can only send a whisper dice roll via text output, even if you have graphics rolling turned on
+//
+// !d2e test // this will output every side of every die to the chat window
+//
+// [0     , 1    , 2   , 3    , 4     , 5    ]
+// [DAMAGE, BLANK, MISS, RANGE, SHIELD, SURGE]
+
+var d2eCONSTANTS = {
+	COMMAND : "!d2e",
+	GRAPHICSIZE : {
+    	SMALL : 20,
+		MEDIUM : 30,
+		LARGE : 40
+	},
+	DAMAGE : 0,
+	BLANK : 1,
+	MISS : 2,
+	RANGE : 3,
+	SHIELD : 4,
+	SURGE : 5,
+	DICEGRAPHICS : {
+		DAMAGE : "http://i.imgur.com/ycOgTiP.png",
+		BLANK : "",
+		MISS : "http://i.imgur.com/aCkmmkc.png",
+		RANGE : "",
+		SHIELD : "http://i.imgur.com/47ebIC5.png",
+		SURGE : "http://i.imgur.com/ZRODaNF.png",
+		BLACK : ["http://i.imgur.com/gvf1A3J.jpg","http://i.imgur.com/wipCzxj.jpg","http://i.imgur.com/wipCzxj.jpg","http://i.imgur.com/wipCzxj.jpg","http://i.imgur.com/fmcImHZ.jpg","http://i.imgur.com/sWc18QA.jpg"],
+		BLUE : ["http://i.imgur.com/NQzQX9O.jpg","http://i.imgur.com/3tJnFkm.jpg","http://i.imgur.com/HrANNCa.jpg","http://i.imgur.com/G31lrYI.jpg","http://i.imgur.com/vEe8aCz.jpg","http://i.imgur.com/oG0iyuW.jpg"],
+		BROWN : ["http://i.imgur.com/EgDD7GQ.jpg","http://i.imgur.com/EgDD7GQ.jpg","http://i.imgur.com/EgDD7GQ.jpg","http://i.imgur.com/Q5DQDdM.jpg","http://i.imgur.com/Q5DQDdM.jpg","http://i.imgur.com/alB8co8.jpg"],
+		GREY : ["http://i.imgur.com/2kYkg7r.jpg","http://i.imgur.com/p09XoyC.jpg","http://i.imgur.com/p09XoyC.jpg","http://i.imgur.com/p09XoyC.jpg","http://i.imgur.com/6SYfN9m.jpg","http://i.imgur.com/3nTbmZe.jpg"],
+		RED : ["http://i.imgur.com/TgWWCHD.jpg","http://i.imgur.com/JgkNETH.jpg","http://i.imgur.com/JgkNETH.jpg","http://i.imgur.com/JgkNETH.jpg","http://i.imgur.com/W8Mj4df.jpg","http://i.imgur.com/3ccGAAC.jpg"],
+		YELLOW : ["http://i.imgur.com/QaqiNPP.jpg","http://i.imgur.com/rrgtxLg.jpg","http://i.imgur.com/pwsMA2M.jpg","http://i.imgur.com/7d6J5wP.jpg","http://i.imgur.com/8Y5PfIb.jpg","http://i.imgur.com/v0Tp4gH.jpg"]
+	},
+	DICEATTACK : {
+		BLUE : [],
+		RED : [],
+		YELLOW : []
+	},
+	DICEDEFENCE : {
+		BLACK : [],
+		BROWN : [],
+		GREY : []
+	}
+};
+
+var d2eGlobal = {
+    diceLogChat : true,
+	diceLogChatWhisper : false,
+	diceGraphicsChat : true,
+	diceGraphicsChatSize : d2eCONSTANTS.GRAPHICSIZE.MEDIUM,
+	diceTextResult : "",
+	diceTextResultLog : "",
+	diceGraphicResult : "",
+	diceGraphicResultLog : "",
+	diceTestEnabled : false,
+	diceLogRolledOnOneLine : false,
+	diceTotals : {
+		damage : 0,
+		blank : 0,
+		miss : 0,
+		range : 0,
+		shield : 0,
+		surge : 0,
+		diceGraphicsLog : "",
+		diceTextLog : "",
+		diceResultsGraphicsLog : "",
+		diceResultsTextLog : ""
+	}
+
+};
+
+function createDice() {
+	d2eCONSTANTS.DICEATTACK.BLUE[0] = [0,0,1,0,0,0];
+	d2eCONSTANTS.DICEATTACK.BLUE[1] = [2,0,0,2,0,1];
+	d2eCONSTANTS.DICEATTACK.BLUE[2] = [2,0,0,3,0,0];
+	d2eCONSTANTS.DICEATTACK.BLUE[3] = [2,0,0,4,0,0];
+	d2eCONSTANTS.DICEATTACK.BLUE[4] = [1,0,0,5,0,0];
+	d2eCONSTANTS.DICEATTACK.BLUE[5] = [1,0,0,6,0,1];
+	d2eCONSTANTS.DICEATTACK.RED[0] = [1,0,0,0,0,0];
+	d2eCONSTANTS.DICEATTACK.RED[1] = [2,0,0,0,0,0];
+	d2eCONSTANTS.DICEATTACK.RED[2] = [2,0,0,0,0,0];
+	d2eCONSTANTS.DICEATTACK.RED[3] = [2,0,0,0,0,0];
+	d2eCONSTANTS.DICEATTACK.RED[4] = [3,0,0,0,0,0];
+	d2eCONSTANTS.DICEATTACK.RED[5] = [3,0,0,0,0,1];
+	d2eCONSTANTS.DICEATTACK.YELLOW[0] = [0,0,0,1,0,1];
+	d2eCONSTANTS.DICEATTACK.YELLOW[1] = [1,0,0,1,0,0];
+	d2eCONSTANTS.DICEATTACK.YELLOW[2] = [1,0,0,2,0,0];
+	d2eCONSTANTS.DICEATTACK.YELLOW[3] = [1,0,0,0,0,1];
+	d2eCONSTANTS.DICEATTACK.YELLOW[4] = [2,0,0,0,0,0];
+	d2eCONSTANTS.DICEATTACK.YELLOW[5] = [2,0,0,0,0,1];
+	d2eCONSTANTS.DICEDEFENCE.BLACK[0] = [0,1,0,0,0,0];
+	d2eCONSTANTS.DICEDEFENCE.BLACK[1] = [0,0,0,0,2,0];
+	d2eCONSTANTS.DICEDEFENCE.BLACK[2] = [0,0,0,0,2,0];
+	d2eCONSTANTS.DICEDEFENCE.BLACK[3] = [0,0,0,0,2,0];
+	d2eCONSTANTS.DICEDEFENCE.BLACK[4] = [0,0,0,0,3,0];
+	d2eCONSTANTS.DICEDEFENCE.BLACK[5] = [0,0,0,0,4,0];
+	d2eCONSTANTS.DICEDEFENCE.BROWN[0] = [0,1,0,0,0,0];
+	d2eCONSTANTS.DICEDEFENCE.BROWN[1] = [0,1,0,0,0,0];
+	d2eCONSTANTS.DICEDEFENCE.BROWN[2] = [0,1,0,0,0,0];
+	d2eCONSTANTS.DICEDEFENCE.BROWN[3] = [0,0,0,0,1,0];
+	d2eCONSTANTS.DICEDEFENCE.BROWN[4] = [0,0,0,0,1,0];
+	d2eCONSTANTS.DICEDEFENCE.BROWN[5] = [0,0,0,0,2,0];
+	d2eCONSTANTS.DICEDEFENCE.GREY[0] = [0,1,0,0,0,0];
+	d2eCONSTANTS.DICEDEFENCE.GREY[1] = [0,0,0,0,1,0];
+	d2eCONSTANTS.DICEDEFENCE.GREY[2] = [0,0,0,0,1,0];
+	d2eCONSTANTS.DICEDEFENCE.GREY[3] = [0,0,0,0,1,0];
+	d2eCONSTANTS.DICEDEFENCE.GREY[4] = [0,0,0,0,2,0];
+	d2eCONSTANTS.DICEDEFENCE.GREY[5] = [0,0,0,0,3,0];
+}
+
+function rollD2EDice(diceQty, diceColor, who){
+	var roll = 0;
+	var diceResult = {
+		damage : 0,
+		blank : 0,
+		miss : 0,
+		range : 0,
+		shield : 0,
+		surge : 0,
+		diceGraphicsLog : "",
+		diceTextLog : ""
+	};
+	var i = 0;
+	var s1 = '<img src="';
+	var s2 = '" title="';
+	var s3 = '" height="';
+	var s4 = '" width="';
+	var s5 = '"/>';
+	
+	if (d2eGlobal.diceTestEnabled === true) {
+		diceQty = 6;
+	}
+	
+	for (i=1;i<=diceQty;i++) {
+
+	if (d2eGlobal.diceTestEnabled === true) {
+		roll = roll;
+	}
+	else {
+		roll = randomInteger(6) - 1;
+	}
+
+	switch(diceColor) {
+        case "black":
+			diceResult.diceTextLog = diceResult.diceTextLog + "";
+			diceResult.diceGraphicsLog = diceResult.diceGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.BLACK[roll] + s2 + roll + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+			diceResult.damage = diceResult.damage + d2eCONSTANTS.DICEDEFENCE.BLACK[roll][d2eCONSTANTS.DAMAGE];
+			diceResult.blank = diceResult.blank + d2eCONSTANTS.DICEDEFENCE.BLACK[roll][d2eCONSTANTS.BLANK];
+			diceResult.miss = diceResult.miss + d2eCONSTANTS.DICEDEFENCE.BLACK[roll][d2eCONSTANTS.MISS];
+			diceResult.range = diceResult.range + d2eCONSTANTS.DICEDEFENCE.BLACK[roll][d2eCONSTANTS.RANGE];
+			diceResult.shield = diceResult.shield + d2eCONSTANTS.DICEDEFENCE.BLACK[roll][d2eCONSTANTS.SHIELD];
+			diceResult.surge = diceResult.surge + d2eCONSTANTS.DICEDEFENCE.BLACK[roll][d2eCONSTANTS.SURGE];
+			break;
+		case "blue":
+			diceResult.diceTextLog = diceResult.diceTextLog + "";
+			diceResult.diceGraphicsLog = diceResult.diceGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.BLUE[roll] + s2 + roll + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+			diceResult.damage = diceResult.damage + d2eCONSTANTS.DICEATTACK.BLUE[roll][d2eCONSTANTS.DAMAGE];
+			diceResult.blank = diceResult.blank + d2eCONSTANTS.DICEATTACK.BLUE[roll][d2eCONSTANTS.BLANK];
+			diceResult.miss = diceResult.miss + d2eCONSTANTS.DICEATTACK.BLUE[roll][d2eCONSTANTS.MISS];
+			diceResult.range = diceResult.range + d2eCONSTANTS.DICEATTACK.BLUE[roll][d2eCONSTANTS.RANGE];
+			diceResult.shield = diceResult.shield + d2eCONSTANTS.DICEATTACK.BLUE[roll][d2eCONSTANTS.SHIELD];
+			diceResult.surge = diceResult.surge + d2eCONSTANTS.DICEATTACK.BLUE[roll][d2eCONSTANTS.SURGE];
+			break;
+		case "brown":
+			diceResult.diceTextLog = diceResult.diceTextLog + "";
+			diceResult.diceGraphicsLog = diceResult.diceGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.BROWN[roll] + s2 + roll + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+			diceResult.damage = diceResult.damage + d2eCONSTANTS.DICEDEFENCE.BROWN[roll][d2eCONSTANTS.DAMAGE];
+			diceResult.blank = diceResult.blank + d2eCONSTANTS.DICEDEFENCE.BROWN[roll][d2eCONSTANTS.BLANK];
+			diceResult.miss = diceResult.miss + d2eCONSTANTS.DICEDEFENCE.BROWN[roll][d2eCONSTANTS.MISS];
+			diceResult.range = diceResult.range + d2eCONSTANTS.DICEDEFENCE.BROWN[roll][d2eCONSTANTS.RANGE];
+			diceResult.shield = diceResult.shield + d2eCONSTANTS.DICEDEFENCE.BROWN[roll][d2eCONSTANTS.SHIELD];
+			diceResult.surge = diceResult.surge + d2eCONSTANTS.DICEDEFENCE.BROWN[roll][d2eCONSTANTS.SURGE];
+			break;
+		case "grey":
+			diceResult.diceTextLog = diceResult.diceTextLog + "";
+			diceResult.diceGraphicsLog = diceResult.diceGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.GREY[roll] + s2 + roll + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+			diceResult.damage = diceResult.damage + d2eCONSTANTS.DICEDEFENCE.GREY[roll][d2eCONSTANTS.DAMAGE];
+			diceResult.blank = diceResult.blank + d2eCONSTANTS.DICEDEFENCE.GREY[roll][d2eCONSTANTS.BLANK];
+			diceResult.miss = diceResult.miss + d2eCONSTANTS.DICEDEFENCE.GREY[roll][d2eCONSTANTS.MISS];
+			diceResult.range = diceResult.range + d2eCONSTANTS.DICEDEFENCE.GREY[roll][d2eCONSTANTS.RANGE];
+			diceResult.shield = diceResult.shield + d2eCONSTANTS.DICEDEFENCE.GREY[roll][d2eCONSTANTS.SHIELD];
+			diceResult.surge = diceResult.surge + d2eCONSTANTS.DICEDEFENCE.GREY[roll][d2eCONSTANTS.SURGE];
+			break;
+		case "red":
+			diceResult.diceTextLog = diceResult.diceTextLog + "";
+			diceResult.diceGraphicsLog = diceResult.diceGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.RED[roll] + s2 + roll + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+			diceResult.damage = diceResult.damage + d2eCONSTANTS.DICEATTACK.RED[roll][d2eCONSTANTS.DAMAGE];
+			diceResult.blank = diceResult.blank + d2eCONSTANTS.DICEATTACK.RED[roll][d2eCONSTANTS.BLANK];
+			diceResult.miss = diceResult.miss + d2eCONSTANTS.DICEATTACK.RED[roll][d2eCONSTANTS.MISS];
+			diceResult.range = diceResult.range + d2eCONSTANTS.DICEATTACK.RED[roll][d2eCONSTANTS.RANGE];
+			diceResult.shield = diceResult.shield + d2eCONSTANTS.DICEATTACK.RED[roll][d2eCONSTANTS.SHIELD];
+			diceResult.surge = diceResult.surge + d2eCONSTANTS.DICEATTACK.RED[roll][d2eCONSTANTS.SURGE];
+			break;
+		case "yellow":
+			diceResult.diceTextLog = diceResult.diceTextLog + "";
+			diceResult.diceGraphicsLog = diceResult.diceGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.YELLOW[roll] + s2 + roll + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+			diceResult.damage = diceResult.damage + d2eCONSTANTS.DICEATTACK.YELLOW[roll][d2eCONSTANTS.DAMAGE];
+			diceResult.blank = diceResult.blank + d2eCONSTANTS.DICEATTACK.YELLOW[roll][d2eCONSTANTS.BLANK];
+			diceResult.miss = diceResult.miss + d2eCONSTANTS.DICEATTACK.YELLOW[roll][d2eCONSTANTS.MISS];
+			diceResult.range = diceResult.range + d2eCONSTANTS.DICEATTACK.YELLOW[roll][d2eCONSTANTS.RANGE];
+			diceResult.shield = diceResult.shield + d2eCONSTANTS.DICEATTACK.YELLOW[roll][d2eCONSTANTS.SHIELD];
+			diceResult.surge = diceResult.surge + d2eCONSTANTS.DICEATTACK.YELLOW[roll][d2eCONSTANTS.SURGE];
+			break;
+    }
+	}
+	
+	return diceResult;
+}
+
+function diceAddition(diceTempTotals) {
+	d2eGlobal.diceTotals.damage = d2eGlobal.diceTotals.damage + diceTempTotals.damage;
+	d2eGlobal.diceTotals.blank = d2eGlobal.diceTotals.blank + diceTempTotals.blank;
+	d2eGlobal.diceTotals.miss = d2eGlobal.diceTotals.miss + diceTempTotals.miss;
+	d2eGlobal.diceTotals.range = d2eGlobal.diceTotals.range + diceTempTotals.range;
+	d2eGlobal.diceTotals.shield = d2eGlobal.diceTotals.shield + diceTempTotals.shield;
+	d2eGlobal.diceTotals.surge = d2eGlobal.diceTotals.surge + diceTempTotals.surge;
+	d2eGlobal.diceTotals.diceGraphicsLog = d2eGlobal.diceTotals.diceGraphicsLog + diceTempTotals.diceGraphicsLog;
+	d2eGlobal.diceTotals.diceTextLog = d2eGlobal.diceTotals.diceTextLog + diceTempTotals.diceTextLog;
+}
+
+function diceResultsGraphics() {
+	var s1 = '<img src="';
+	var s2 = '" title="';
+	var s3 = '" height="';
+	var s4 = '" width="';
+	var s5 = '"/>';
+	var i = 0;
+	
+	for (i=1;i<=d2eGlobal.diceTotals.miss;i++) {
+		d2eGlobal.diceTotals.diceResultsTextLog = d2eGlobal.diceTotals.diceResultsTextLog + "";
+		d2eGlobal.diceTotals.diceResultsGraphicsLog = d2eGlobal.diceTotals.diceResultsGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.MISS + s2 + "Miss" + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+	}
+	d2eGlobal.diceTotals.diceResultsTextLog = d2eGlobal.diceTotals.diceResultsTextLog + "";
+	d2eGlobal.diceTotals.diceResultsGraphicsLog = d2eGlobal.diceTotals.diceResultsGraphicsLog + "<p>R:" + d2eGlobal.diceTotals.range + "</p>";
+	for (i=1;i<=d2eGlobal.diceTotals.damage;i++) {
+		d2eGlobal.diceTotals.diceResultsTextLog = d2eGlobal.diceTotals.diceResultsTextLog + "";
+		d2eGlobal.diceTotals.diceResultsGraphicsLog = d2eGlobal.diceTotals.diceResultsGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.DAMAGE + s2 + "Damage" + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+	}
+	for (i=1;i<=d2eGlobal.diceTotals.shield;i++) {
+		d2eGlobal.diceTotals.diceResultsTextLog = d2eGlobal.diceTotals.diceResultsTextLog + "";
+		d2eGlobal.diceTotals.diceResultsGraphicsLog = d2eGlobal.diceTotals.diceResultsGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.SHIELD + s2 + "Shield" + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+	}
+	for (i=1;i<=d2eGlobal.diceTotals.surge;i++) {
+		d2eGlobal.diceTotals.diceResultsTextLog = d2eGlobal.diceTotals.diceResultsTextLog + "";
+		d2eGlobal.diceTotals.diceResultsGraphicsLog = d2eGlobal.diceTotals.diceResultsGraphicsLog + s1 + d2eCONSTANTS.DICEGRAPHICS.SURGE + s2 + "Surge" + s3 + d2eGlobal.diceGraphicsChatSize + s4 + d2eGlobal.diceGraphicsChatSize + s5;
+	}
+}
+
+function processD2EDiceScript(diceToRoll, who){
+
+	d2eGlobal.diceTotals.damage = 0;
+	d2eGlobal.diceTotals.blank = 0;
+	d2eGlobal.diceTotals.miss = 0;
+	d2eGlobal.diceTotals.range = 0;
+	d2eGlobal.diceTotals.shield = 0;
+	d2eGlobal.diceTotals.surge = 0;
+	d2eGlobal.diceTotals.diceGraphicsLog = "";
+	d2eGlobal.diceTotals.diceTextLog = "";
+	d2eGlobal.diceTotals.diceResultsGraphicsLog = "";
+	d2eGlobal.diceTotals.diceResultsTextLog = "";
+	
+	if (diceToRoll[0] === "a") {
+		if (diceToRoll[1] >0) {
+			diceAddition(rollD2EDice(diceToRoll[1], "blue", who));
+		}
+		if (diceToRoll[2] >0) {
+			diceAddition(rollD2EDice(diceToRoll[2], "red", who));
+		}
+		if (diceToRoll[3] >0) {
+			diceAddition(rollD2EDice(diceToRoll[3], "yellow", who));
+		}
+	}
+	else {
+		if (diceToRoll[1] >0) {
+			diceAddition(rollD2EDice(diceToRoll[1], "black", who));
+		}
+		if (diceToRoll[2] >0) {
+			diceAddition(rollD2EDice(diceToRoll[2], "brown", who));
+		}
+		if (diceToRoll[3] >0) {
+			diceAddition(rollD2EDice(diceToRoll[3], "grey", who));
+		}
+	}
+	
+	if (d2eGlobal.diceTestEnabled === true) {
+		sendChat("", "/desc " + who + diceToRoll);
+	}
+	else {
+		if (d2eGlobal.diceLogChatWhisper === true) {
+			//sendChat(who, "/w gm " + diceToRoll);
+			//sendChat(who, "/w " + who + " " + diceToRoll);
+		}
+		else {
+			sendChat(who, "/em " + diceToRoll);
+		}
+	}
+	
+	if (d2eGlobal.diceLogChat === true) {
+		if (d2eGlobal.diceLogRolledOnOneLine === true) {
+			if (d2eGlobal.diceGraphicsChat === true && d2eGlobal.diceLogChatWhisper === false) {
+				sendChat("", "/direct " + d2eGlobal.diceTotals.diceGraphicsLog);
+			}
+			else {
+				if (d2eGlobal.diceLogChatWhisper === true) {
+					//sendChat("", "/w gm " + d2eGlobal.diceTotals.diceTextLog);
+					//sendChat("", "/w " + who + " " + d2eGlobal.diceTotals.diceTextLog);
+				}
+				else {
+					sendChat("", d2eGlobal.diceTotals.diceTextLog);
+				}
+			}			
+		}
+		else {
+			if (d2eGlobal.diceGraphicsChat === true && d2eGlobal.diceLogChatWhisper === false) {
+				sendChat("", "/direct " + d2eGlobal.diceTotals.diceGraphicsLog);
+			}
+			else {
+				if (d2eGlobal.diceLogChatWhisper === true) {
+					//sendChat("", "/w gm " + d2eGlobal.diceTotals.diceTextLog);
+					//sendChat("", "/w " + who + " " + d2eGlobal.diceTotals.diceTextLog);
+				}
+				else {
+					sendChat("", d2eGlobal.diceTotals.diceTextLog);
+				}
+			}
+		}
+	}
+
+	diceResultsGraphics();
+	
+	if (d2eGlobal.diceLogChat === true) {
+		if (d2eGlobal.diceLogRolledOnOneLine === true) {
+			if (d2eGlobal.diceGraphicsChat === true && d2eGlobal.diceLogChatWhisper === false) {
+				sendChat("", "/direct " + d2eGlobal.diceTotals.diceResultsGraphicsLog);
+			}
+			else {
+				if (d2eGlobal.diceLogChatWhisper === true) {
+					//sendChat("", "/w gm " + d2eGlobal.diceTotals.diceResultsTextLog);
+					//sendChat("", "/w " + who + " " + d2eGlobal.diceTotals.diceResultsTextLog);
+				}
+				else {
+					sendChat("", d2eGlobal.diceTotals.diceResultsTextLog);
+				}
+			}			
+		}
+		else {
+			if (d2eGlobal.diceGraphicsChat === true && d2eGlobal.diceLogChatWhisper === false) {
+				sendChat("", "/direct " + d2eGlobal.diceTotals.diceResultsGraphicsLog);
+			}
+			else {
+				if (d2eGlobal.diceLogChatWhisper === true) {
+					//sendChat("", "/w gm " + d2eGlobal.diceTotals.diceResultsTextLog);
+					//sendChat("", "/w " + who + " " + d2eGlobal.diceTotals.diceResultsTextLog);
+				}
+				else {
+					sendChat("", d2eGlobal.diceTotals.diceResultsTextLog);
+				}
+			}
+		}
+	}
+}
+
+var processScriptTabs = function(argv, who) {
+    // this will run the various other scripts depending upon the chat
+    // window command.  Just add another Case statement to add a new command.
+	var tmpLogChat = false;
+	var tmpGraphicsChat = false;
+	
+	createDice();
+	
+    var script = argv.shift();
+    switch(script) {
+    	case d2eCONSTANTS.COMMAND:
+			switch(argv[0]) {
+				case "log":
+					switch(argv[1]) {
+						case "on":
+							d2eGlobal.diceLogChat = true;
+							break;
+						case "off":
+							d2eGlobal.diceLogChat = false;
+							break;
+						case "multi":
+							d2eGlobal.diceLogRolledOnOneLine = false;
+							break;
+						case "single":
+							d2eGlobal.diceLogRolledOnOneLine = true;
+							break;
+
+					}
+					break;
+				case "w":
+					d2eGlobal.diceLogChatWhisper = true;
+					argv.shift();
+					processD2EDiceScript(argv, who);
+					d2eGlobal.diceLogChatWhisper = false;
+					break;
+				case "graphics":
+					switch(argv[1]) {
+						case "on":
+							d2eGlobal.diceGraphicsChat = true;
+							break;
+						case "off":
+							d2eGlobal.diceGraphicsChat = false;
+							break;
+						case "s":
+							d2eGlobal.diceGraphicsChatSize = d2eCONSTANTS.GRAPHICSIZE.SMALL;
+							break;
+						case "m":
+							d2eGlobal.diceGraphicsChatSize = d2eCONSTANTS.GRAPHICSIZE.MEDIUM;
+							break;
+						case "l":
+							d2eGlobal.diceGraphicsChatSize = d2eCONSTANTS.GRAPHICSIZE.LARGE;
+							break;
+					}
+					break;
+				case "test":
+					d2eGlobal.diceTestEnabled = true;
+					tmpLogChat = d2eGlobal.diceLogChat;
+					tmpGraphicsChat = d2eGlobal.diceGraphicsChat;
+					d2eGlobal.diceLogChat = true;
+					d2eGlobal.diceGraphicsChat = true;
+					processD2EDiceScript(["a 1 1 1"], who);
+					processD2EDiceScript(["d 1 1 1"], who);
+					d2eGlobal.diceTestEnabled = false;
+					d2eGlobal.diceLogChat = tmpLogChat;
+					d2eGlobal.diceGraphicsChat = tmpGraphicsChat;
+					break;
+				default:
+					processD2EDiceScript(argv, who);
+					d2eGlobal.diceLogChatWhisper = false;
+			}
+			break;
+    }
+};
+
+on("chat:message", function(msg) {
+    // returns the chat window command entered, all in lowercase.
+    
+    var chatCommand = msg.content;
+    chatCommand = chatCommand.toLowerCase(); //make all characters lowercase
+
+    var argv = chatCommand.split(' ');
+    if (msg.type != 'api') {
+        return;
+    }
+    return processScriptTabs(argv, msg.who);
+});
